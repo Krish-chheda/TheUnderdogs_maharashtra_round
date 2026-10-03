@@ -1,12 +1,12 @@
 import random
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.redis import redis_client
-from app.core.security import create_access_token
+from app.core.security import create_access_token, get_password_hash, verify_password
 from app.models.base import User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -17,6 +17,48 @@ class OTPRequest(BaseModel):
 class OTPVerify(BaseModel):
     phone: str
     code: str
+
+class AuthCredentials(BaseModel):
+    email: str
+    password: str
+
+class SignupRequest(AuthCredentials):
+    role: str = "user"
+
+@router.post("/signup", status_code=status.HTTP_201_CREATED)
+async def signup(payload: SignupRequest, db: AsyncSession = Depends(get_db)):
+    if payload.role not in {"user", "admin"}:
+        raise HTTPException(status_code=400, detail="Role must be user or admin")
+
+    result = await db.execute(select(User).where(User.email == payload.email.lower()))
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+
+    user = User(
+        email=payload.email.lower(),
+        password_hash=get_password_hash(payload.password),
+        role=payload.role,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    return {"message": "Account created", "user_id": str(user.id), "role": user.role}
+
+@router.post("/login")
+async def login(payload: AuthCredentials, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == payload.email.lower()))
+    user = result.scalar_one_or_none()
+    if not user or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    access_token = create_access_token({"sub": str(user.id), "role": user.role})
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": str(user.id),
+        "role": user.role,
+    }
 
 @router.post("/otp")
 async def request_otp(payload: OTPRequest):
@@ -46,7 +88,11 @@ async def verify_otp(payload: OTPVerify, db: AsyncSession = Depends(get_db)):
     user = result.scalar_one_or_none()
     
     if not user:
-        user = User(phone=payload.phone)
+        user = User(
+            phone=payload.phone,
+            email=f"{payload.phone}@otp.local",
+            password_hash="",
+        )
         db.add(user)
         await db.commit()
         await db.refresh(user)

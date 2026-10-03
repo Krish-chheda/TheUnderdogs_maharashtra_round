@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from app.core.database import get_db
-from app.models.base import Event
+from app.models.base import Event, User
+from app.dependencies.auth import get_current_admin
 
 router = APIRouter(prefix="/admin/events", tags=["admin"])
 
@@ -11,8 +12,11 @@ class EventCreate(BaseModel):
     capacity: int
 
 @router.post("/")
-async def create_event(event_data: EventCreate, db: AsyncSession = Depends(get_db)):
-    """Sprint Hack: Unprotected route just to seed an event for testing."""
+async def create_event(
+    event_data: EventCreate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
     new_event = Event(
         name=event_data.name,
         capacity=event_data.capacity,
