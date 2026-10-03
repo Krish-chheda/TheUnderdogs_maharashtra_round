@@ -23,6 +23,7 @@ class AuthCredentials(BaseModel):
 
 class SignupRequest(AuthCredentials):
     role: str = "user"
+    
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def signup(payload: SignupRequest, db: AsyncSession = Depends(get_db)):

@@ -1,29 +1,37 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Request
+from datetime import datetime, timezone
+import json
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Header
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import select
-from app.models.base import Event, Entry, Allocation, User
+
+from app.models.base import Event, Entry, Allocation, User, Reservation
+
 from app.core.database import get_db
-from app.dependencies.auth import get_current_user
-from app.dependencies.rate_limit import rate_limit 
-import json
 from app.core.redis import redis_client
-import json
-from datetime import datetime, timezone
-from fastapi import Header
-from app.models.base import Reservation
+
+from app.dependencies.auth import get_current_user
+from app.dependencies.fraud import anti_bot_farm
+from app.dependencies.rate_limit import rate_limit 
+
+
+
+
 
 
 router = APIRouter(prefix="/events", tags=["events"])
 
 @router.post("/{event_id}/enter")
 async def enter_drop(
-    event_id: uuid.UUID,
+    event_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-    rl = Depends(rate_limit("enter", capacity=5, refill=0.5))
+    rl = Depends(rate_limit("enter", capacity=5, refill=0.5)),
+    fraud_guard = Depends(anti_bot_farm)
 ):
     # 1. Verify Event Status
     event = await db.get(Event, event_id)
@@ -180,3 +188,4 @@ async def claim_ticket(
     except Exception as e:
         await db.rollback()
         raise HTTPException(500, f"An error occurred: {str(e)}")
+
