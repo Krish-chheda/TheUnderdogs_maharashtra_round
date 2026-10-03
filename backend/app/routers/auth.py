@@ -2,7 +2,7 @@ import random
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel,Field
+from pydantic import BaseModel, Field
 from app.core.database import get_db
 from app.core.redis import redis_client
 from app.core.security import create_access_token, get_password_hash, verify_password
@@ -19,7 +19,7 @@ class OTPVerify(BaseModel):
 
 class AuthCredentials(BaseModel):
     email: str
-    password: str
+    password: str = Field(..., min_length=8, max_length=72)
 
 class SignupRequest(AuthCredentials):
     role: str = "user"
