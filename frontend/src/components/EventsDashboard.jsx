@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { myEvents } from "../data/events";
-import { fetchEvents } from "../lib/api";
+import { fetchEntryStatus, fetchEvents } from "../lib/api";
 import "../events.css";
 
 const formatDate = (value) =>
@@ -15,6 +14,22 @@ const formatDate = (value) =>
     : "Date to be announced";
 
 const formatNumber = (value) => new Intl.NumberFormat("en-IN").format(value);
+
+const statusLabels = {
+  ELIGIBLE: "Eligible",
+  WINNER: "Winner",
+  WAITLISTED: "Waitlisted",
+  RESERVED: "Claimed",
+  EXPIRED: "Expired",
+};
+
+const statusActions = {
+  ELIGIBLE: "View status",
+  WINNER: "Claim seat",
+  WAITLISTED: "View status",
+  RESERVED: "View reservation",
+  EXPIRED: "View status",
+};
 
 function StatusBadge({ children, tone = "neutral" }) {
   return <span className={`status-badge status-${tone}`}>{children}</span>;
@@ -81,6 +96,7 @@ function EventCard({ event, onOpen }) {
 export default function EventsDashboard({ onOpenEvent, onLogout }) {
   const [activeView, setActiveView] = useState("events");
   const [events, setEvents] = useState([]);
+  const [myEvents, setMyEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -88,7 +104,32 @@ export default function EventsDashboard({ onOpenEvent, onLogout }) {
     let active = true;
     fetchEvents()
       .then((items) => {
-        if (active) setEvents(items);
+        if (!active) return;
+        setEvents(
+          items.filter(
+            (event) => event.isOpen && event.scheduleValid !== false,
+          ),
+        );
+        return Promise.all(
+          items.map(async (event) => {
+            try {
+              const result = await fetchEntryStatus(event.id);
+              return {
+                ...event,
+                status: statusLabels[result.status] || result.status,
+                action: statusActions[result.status] || "View status",
+                claimExpiresAt: result.claim_expires_at,
+              };
+            } catch {
+              return null;
+            }
+          }),
+        );
+      })
+      .then((registeredEvents) => {
+        if (active && registeredEvents) {
+          setMyEvents(registeredEvents.filter(Boolean));
+        }
       })
       .catch((requestError) => {
         if (active) setError(requestError.message);
