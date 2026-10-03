@@ -5,18 +5,12 @@ import json
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select,asc
 from sqlalchemy.dialects.postgresql import insert
 from app.core.database import get_db
 from app.core.redis import redis_client
 from app.models.base import Event, Entry, Allocation
-
-
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
-from app.core.database import get_db
-from app.models.base import Event
 
 router = APIRouter(prefix="/admin/events", tags=["admin"])
 
@@ -120,4 +114,51 @@ async def run_allocation(event_id: str, db: AsyncSession = Depends(get_db)):
         "winners": len(winners),
         "waitlisted": len(waitlist),
         "audit": audit_data
+    }
+
+
+@router.post("/{event_id}/sweep")
+async def sweep_waitlist(event_id: str, db: AsyncSession = Depends(get_db)):
+    now_utc = datetime.now(timezone.utc)
+    
+    # 1. Find and lock expired winners using SKIP LOCKED
+    expired_query = select(Allocation).where(
+        Allocation.event_id == event_id,
+        Allocation.status == "WINNER",
+        Allocation.claim_expires_at < now_utc
+    ).with_for_update(skip_locked=True)
+    
+    result = await db.execute(expired_query)
+    expired_allocations = result.scalars().all()
+    
+    if not expired_allocations:
+        return {"message": "No expired tickets to sweep."}
+        
+    for alloc in expired_allocations:
+        alloc.status = "EXPIRED"
+        
+    # 2. Promote waitlisted users based on rank
+    spots_to_fill = len(expired_allocations)
+    
+    waitlist_query = select(Allocation).where(
+        Allocation.event_id == event_id,
+        Allocation.status == "WAITLISTED"
+    ).order_by(asc(Allocation.rank)).limit(spots_to_fill).with_for_update(skip_locked=True)
+    
+    wl_result = await db.execute(waitlist_query)
+    promoted_allocations = wl_result.scalars().all()
+    
+    # Give promoted users 10 minutes to claim
+    claim_deadline = now_utc + timedelta(minutes=10)
+    
+    for alloc in promoted_allocations:
+        alloc.status = "WINNER"
+        alloc.claim_expires_at = claim_deadline
+        
+    await db.commit()
+    
+    return {
+        "status": "SWEEP_COMPLETE",
+        "revoked_tickets": spots_to_fill,
+        "promoted_users": len(promoted_allocations)
     }

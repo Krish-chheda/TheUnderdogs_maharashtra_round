@@ -2,8 +2,7 @@ import random
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel
-
+from pydantic import BaseModel,Field
 from app.core.database import get_db
 from app.core.redis import redis_client
 from app.core.security import create_access_token
@@ -12,11 +11,11 @@ from app.models.base import User
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 class OTPRequest(BaseModel):
-    phone: str
+    phone: str = Field(..., pattern=r"^\d{10}$", description="Must be exactly 10 digits")
 
 class OTPVerify(BaseModel):
-    phone: str
-    code: str
+    phone: str = Field(..., pattern=r"^\d{10}$")
+    code: str = Field(..., min_length=6, max_length=6)
 
 @router.post("/otp")
 async def request_otp(payload: OTPRequest):
