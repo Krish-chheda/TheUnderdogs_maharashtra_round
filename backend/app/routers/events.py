@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import select
 
-from app.models.base import Event, Entry, Allocation
+from app.models.base import Event, Entry, Allocation, User
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.dependencies.rate_limit import rate_limit  # (Code provided previously)
