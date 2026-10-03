@@ -1,14 +1,14 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, select, asc
 from app.core.database import get_db
-from app.models.base import Event, User
+from app.models.base import Event, User, Entry, Allocation, Reservation
 from app.dependencies.auth import get_current_admin
-from app.services.allocation import allocate_event
+from app.dependencies.rate_limit import check_token_bucket, get_client_ip
+from app.services.allocation import allocate_event, commit_allocation
 from app.core.redis import redis_client
-from app.models.base import Event, Entry, Allocation, Reservation
 from pydantic import BaseModel, model_validator
 
 router = APIRouter(prefix="/admin/events", tags=["admin"])
@@ -21,6 +21,7 @@ class EventCreate(BaseModel):
     registration_deadline: datetime
     batch_duration_seconds: int = 120
     batch_weights: list[float] | None = None
+    requires_phone_verification: bool = False
 
     @model_validator(mode="after")
     def validate_schedule(self):
@@ -57,6 +58,7 @@ async def create_event(
         batch_weights=event_data.batch_weights,
         capacity=event_data.capacity,
         remaining_seats=event_data.capacity,
+        requires_phone_verification=event_data.requires_phone_verification,
         is_open=True
     )
     db.add(new_event)
@@ -84,21 +86,47 @@ async def delete_event(
 
     return {"message": "Event deleted", "event_id": str(event_id)}
 
+@router.post("/{event_id}/allocation/commit")
+async def commit_event_allocation(
+    event_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """
+    Phase 11: Create pre-draw commitment before executing allocation.
+    """
+    client_ip = get_client_ip(request)
+    await check_token_bucket(f"rl:admin_alloc:{client_ip}", capacity=20, refill=2.0)
+    try:
+        return await commit_allocation(db, event_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
+@router.post("/{event_id}/allocation/run")
 @router.post("/{event_id}/allocate")
 async def run_allocation(
     event_id: uuid.UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    admin: User = Depends(get_current_admin),
 ):
+    """
+    Execute allocation draw using pre-committed seed (or auto-commit if not yet committed).
+    """
+    client_ip = get_client_ip(request)
+    await check_token_bucket(f"rl:admin_alloc:{client_ip}", capacity=20, refill=2.0)
     try:
         return await allocate_event(db, event_id)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
-
 @router.post("/{event_id}/sweep")
-async def sweep_waitlist(event_id: str, db: AsyncSession = Depends(get_db)):
+async def sweep_waitlist(
+    event_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
     now_utc = datetime.now(timezone.utc)
     
     # 1. Find and lock expired winners using SKIP LOCKED

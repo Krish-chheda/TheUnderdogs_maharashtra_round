@@ -3,10 +3,11 @@ from datetime import datetime, timedelta
 import bcrypt
 from jose import jwt
 
-# Secret key to sign the JWTs
-SECRET_KEY = os.getenv("JWT_SECRET", "super-secret-key-for-24h-sprint")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # Tokens last 24 hours
+from app.core.config import settings
+
+SECRET_KEY = settings.JWT_SECRET
+ALGORITHM = settings.JWT_ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 def create_access_token(data: dict):
     to_encode = data.copy()

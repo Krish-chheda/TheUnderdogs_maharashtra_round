@@ -10,8 +10,7 @@ from app.models.base import User
 
 # Use HTTPBearer for custom OTP flows so Swagger gives a simple token input field
 security = HTTPBearer()
-SECRET_KEY = os.getenv("JWT_SECRET", "super-secret-key-for-24h-sprint")
-ALGORITHM = "HS256"
+from app.core.security import SECRET_KEY, ALGORITHM
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security), 

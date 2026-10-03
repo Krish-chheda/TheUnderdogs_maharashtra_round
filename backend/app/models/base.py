@@ -14,6 +14,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(20), default="user", server_default="user")
+    is_phone_verified: Mapped[bool] = mapped_column(default=False, server_default="false")
+    phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 class Event(Base):
@@ -30,6 +32,7 @@ class Event(Base):
     capacity: Mapped[int] = mapped_column(Integer)
     remaining_seats: Mapped[int] = mapped_column(Integer)
     is_open: Mapped[bool] = mapped_column(default=True)
+    requires_phone_verification: Mapped[bool] = mapped_column(default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 class Entry(Base):
@@ -58,6 +61,10 @@ class AllocationRun(Base):
     event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("events.id"), unique=True)
     allocation_seed: Mapped[str] = mapped_column(String(128))
     seed_commitment: Mapped[str] = mapped_column(String(128))
+    revealed_seed: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    allocation_result_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    commitment_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    allocation_executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     batch_duration_seconds: Mapped[int] = mapped_column(Integer)
     allocation_policy: Mapped[dict] = mapped_column(JSON)
     batch_definitions: Mapped[list] = mapped_column(JSON)

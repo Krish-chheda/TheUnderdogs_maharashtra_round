@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { signup, login } from "../lib/api";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -44,7 +46,8 @@ const styles = {
   },
 };
 
-export default function AuthPage({ onBack, onLogin }) {
+export default function AuthPage() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -60,26 +63,18 @@ export default function AuthPage({ onBack, onLogin }) {
     setMessage("");
 
     try {
-      const response = await fetch(
-        `${API_URL}/auth/${mode === "login" ? "login" : "signup"}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(
-            mode === "login" ? { email, password } : { email, password, role },
-          ),
-        },
-      );
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Authentication failed");
-
+      let data;
       if (mode === "signup") {
+        data = await signup(email, password, role);
         setMode("login");
         setMessage("Account created. Log in to continue.");
+        setEmail("");
+        setPassword("");
       } else {
+        data = await login(email, password);
         localStorage.setItem("access_token", data.access_token);
         localStorage.setItem("user_role", data.role);
-        onLogin?.(data);
+        navigate(data.role === "admin" ? "/admin/events" : "/events");
       }
     } catch (requestError) {
       setError(requestError.message);
@@ -104,7 +99,7 @@ export default function AuthPage({ onBack, onLogin }) {
       <div style={styles.panel}>
         <button
           type="button"
-          onClick={onBack}
+          onClick={() => navigate("/")}
           style={{
             border: 0,
             background: "transparent",
