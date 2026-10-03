@@ -21,6 +21,9 @@ class Event(Base):
     
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255))
+    venue: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    event_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    registration_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     capacity: Mapped[int] = mapped_column(Integer)
     remaining_seats: Mapped[int] = mapped_column(Integer)
     is_open: Mapped[bool] = mapped_column(default=True)

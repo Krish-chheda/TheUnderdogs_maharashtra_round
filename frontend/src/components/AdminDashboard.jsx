@@ -26,6 +26,8 @@ const toAdminEvent = (event) => ({
   name: event.name,
   capacity: event.capacity,
   totalEntries: event.entryCount ?? event.totalEntries ?? 0,
+  venue: event.venue || "Venue to be announced",
+  date: event.date || "",
   status:
     event.isOpen === false || event.status === "Closed"
       ? lifecycle.REGISTRATION_CLOSED
@@ -157,6 +159,9 @@ export default function AdminDashboard({ onLogout }) {
   const [integrity, setIntegrity] = useState(initialIntegrity);
   const [eventName, setEventName] = useState("");
   const [capacity, setCapacity] = useState(500);
+  const [venue, setVenue] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [registrationDeadline, setRegistrationDeadline] = useState("");
   const [creating, setCreating] = useState(false);
   const [processingId, setProcessingId] = useState("");
   const [error, setError] = useState("");
@@ -193,8 +198,20 @@ export default function AdminDashboard({ onLogout }) {
   const createEvent = async (event) => {
     event.preventDefault();
     const cleanName = eventName.trim();
-    if (!cleanName || Number(capacity) < 1) {
-      setError("Enter an event name and a capacity greater than zero.");
+    if (
+      !cleanName ||
+      Number(capacity) < 1 ||
+      !venue.trim() ||
+      !eventDate ||
+      !registrationDeadline
+    ) {
+      setError(
+        "Enter an event name, capacity, venue, date, and registration deadline.",
+      );
+      return;
+    }
+    if (new Date(registrationDeadline) <= new Date(eventDate)) {
+      setError("The registration deadline must be after the event date.");
       return;
     }
     setCreating(true);
@@ -204,6 +221,9 @@ export default function AdminDashboard({ onLogout }) {
       const created = await createEventRequest({
         name: cleanName,
         capacity: Number(capacity),
+        venue: venue.trim(),
+        event_date: new Date(eventDate).toISOString(),
+        registration_deadline: new Date(registrationDeadline).toISOString(),
       });
       setEvents((current) => [
         ...current,
@@ -212,10 +232,16 @@ export default function AdminDashboard({ onLogout }) {
           capacity: Number(capacity),
           entryCount: 0,
           isOpen: true,
+          venue: venue.trim(),
+          date: new Date(eventDate).toISOString(),
+          registrationDeadline: new Date(registrationDeadline).toISOString(),
         }),
       ]);
       setEventName("");
       setCapacity(500);
+      setVenue("");
+      setEventDate("");
+      setRegistrationDeadline("");
       setNotice("Event created and stored in the database.");
     } catch (requestError) {
       setError(requestError.message);
@@ -366,6 +392,32 @@ export default function AdminDashboard({ onLogout }) {
                 min="1"
                 value={capacity}
                 onChange={(event) => setCapacity(event.target.value)}
+              />
+            </label>
+            <label>
+              Venue
+              <input
+                value={venue}
+                onChange={(event) => setVenue(event.target.value)}
+                placeholder="e.g. The Workshop, Bengaluru"
+              />
+            </label>
+            <label>
+              Date
+              <input
+                type="datetime-local"
+                value={eventDate}
+                onChange={(event) => setEventDate(event.target.value)}
+              />
+            </label>
+            <label>
+              Deadline
+              <input
+                type="datetime-local"
+                value={registrationDeadline}
+                onChange={(event) =>
+                  setRegistrationDeadline(event.target.value)
+                }
               />
             </label>
             <button

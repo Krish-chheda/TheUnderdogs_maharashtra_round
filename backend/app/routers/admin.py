@@ -19,6 +19,9 @@ router = APIRouter(prefix="/admin/events", tags=["admin"])
 class EventCreate(BaseModel):
     name: str
     capacity: int
+    venue: str
+    event_date: datetime
+    registration_deadline: datetime
 
 @router.post("/")
 async def create_event(
@@ -28,6 +31,9 @@ async def create_event(
 ):
     new_event = Event(
         name=event_data.name,
+        venue=event_data.venue,
+        event_date=event_data.event_date,
+        registration_deadline=event_data.registration_deadline,
         capacity=event_data.capacity,
         remaining_seats=event_data.capacity,
         is_open=True
