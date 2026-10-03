@@ -81,6 +81,7 @@ async def get_event(event_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     event, entry_count = row
     return serialize_event(event, entry_count)
 
+@router.post("/{event_id}/join")
 @router.post("/{event_id}/enter")
 async def enter_drop(
     event_id: str,
@@ -90,8 +91,19 @@ async def enter_drop(
     rl = Depends(rate_limit("enter", capacity=5, refill=0.5)),
     fraud_guard = Depends(anti_bot_farm)
 ):
-    # 1. Verify Event Status
     event = await db.get(Event, event_id)
+    existing_entry = await db.scalar(
+        select(Entry).where(Entry.event_id == event_id, Entry.user_id == user.id)
+    )
+    if existing_entry:
+        return {
+            "entry_id": str(existing_entry.id),
+            "status": existing_entry.allocation_status or existing_entry.status,
+            "joined_at": existing_entry.joined_at,
+            "batch_id": existing_entry.batch_id,
+        }
+
+    # Verify event status before creating the first entry.
     now = datetime.now(timezone.utc)
     event_date = utc_time(event.event_date) if event and event.event_date else None
     registration_deadline = utc_time(event.registration_deadline) if event and event.registration_deadline else None
@@ -122,12 +134,16 @@ async def enter_drop(
         entry = existing_result.scalar_one()
 
     await db.commit()
+    await db.refresh(entry)
 
     return {
         "entry_id": str(entry.id),
-        "status": entry.status
+        "status": entry.status,
+        "joined_at": entry.joined_at,
+        "batch_id": entry.batch_id,
     }
 
+@router.get("/{event_id}/queue-status")
 @router.get("/{event_id}/status")
 async def get_my_status(
     event_id: uuid.UUID,
@@ -138,7 +154,14 @@ async def get_my_status(
     Frontend TanStack Query polls this every 5 seconds.
     It checks Allocations first (post-draw), then falls back to Entry (pre-draw).
     """
-    # Check if the draw happened and we have an allocation
+    entry_query = select(Entry).where(
+        Entry.event_id == event_id,
+        Entry.user_id == user.id,
+    )
+    entry = await db.scalar(entry_query)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Not entered in this drop")
+
     alloc_query = select(Allocation).where(
         Allocation.event_id == event_id, 
         Allocation.user_id == user.id
@@ -148,23 +171,20 @@ async def get_my_status(
 
     if allocation:
         return {
-            "status": allocation.status,  # WINNER, WAITLISTED, EXPIRED, RESERVED
+            "status": allocation.status,
             "rank": allocation.rank,
-            "claim_expires_at": allocation.claim_expires_at
+            "claim_expires_at": allocation.claim_expires_at,
+            "joined_at": entry.joined_at,
+            "batch_id": entry.batch_id,
+            "randomized_position": entry.randomized_position,
         }
 
-    # If no allocation, check if they are entered
-    entry_query = select(Entry).where(
-        Entry.event_id == event_id, 
-        Entry.user_id == user.id
-    )
-    entry_result = await db.execute(entry_query)
-    entry = entry_result.scalar_one_or_none()
-
-    if entry:
-        return {"status": entry.status} # ELIGIBLE
-
-    raise HTTPException(status_code=404, detail="Not entered in this drop")
+    return {
+        "status": entry.allocation_status or entry.status,
+        "joined_at": entry.joined_at,
+        "batch_id": entry.batch_id,
+        "randomized_position": entry.randomized_position,
+    }
 
 @router.get("/{event_id}/audit")
 async def get_audit_proof(event_id: str):

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy import JSON, Text, String, Integer, DateTime, ForeignKey, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 class Base(DeclarativeBase):
@@ -24,6 +24,9 @@ class Event(Base):
     venue: Mapped[str | None] = mapped_column(String(255), nullable=True)
     event_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     registration_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    registration_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=True)
+    batch_duration_seconds: Mapped[int] = mapped_column(Integer, server_default="120", default=120)
+    batch_weights: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
     capacity: Mapped[int] = mapped_column(Integer)
     remaining_seats: Mapped[int] = mapped_column(Integer)
     is_open: Mapped[bool] = mapped_column(default=True)
@@ -36,12 +39,35 @@ class Entry(Base):
     event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("events.id"))
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     status: Mapped[str] = mapped_column(String(50), default="ELIGIBLE")
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    batch_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    randomized_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    allocation_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    allocated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     __table_args__ = (
         # Prevents a user from entering the same event twice
         UniqueConstraint('event_id', 'user_id', name='uix_event_user_entry'),
     )
+
+class AllocationRun(Base):
+    __tablename__ = "allocation_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("events.id"), unique=True)
+    allocation_seed: Mapped[str] = mapped_column(String(128))
+    seed_commitment: Mapped[str] = mapped_column(String(128))
+    batch_duration_seconds: Mapped[int] = mapped_column(Integer)
+    allocation_policy: Mapped[dict] = mapped_column(JSON)
+    batch_definitions: Mapped[list] = mapped_column(JSON)
+    entry_list_hash: Mapped[str] = mapped_column(String(128))
+    eligible_entry_count: Mapped[int] = mapped_column(Integer)
+    winner_count: Mapped[int] = mapped_column(Integer)
+    waitlist_count: Mapped[int] = mapped_column(Integer)
+    allocated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    status: Mapped[str] = mapped_column(String(50))
+    result_json: Mapped[str] = mapped_column(Text, default="{}")
 
 class Allocation(Base):
     __tablename__ = "allocations"
@@ -52,6 +78,7 @@ class Allocation(Base):
     rank: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(50)) # WINNER, WAITLISTED, EXPIRED, RESERVED
     claim_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    allocation_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("allocation_runs.id"), nullable=True)
 
     __table_args__ = (
         # Prevents a user from receiving multiple allocations per event
