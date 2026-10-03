@@ -2,7 +2,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy import select
+from sqlalchemy import func, select
 from app.models.base import Event, Entry, Allocation, User
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
@@ -16,6 +16,45 @@ from app.models.base import Reservation
 
 
 router = APIRouter(prefix="/events", tags=["events"])
+
+def serialize_event(event: Event, entry_count: int):
+    return {
+        "id": str(event.id),
+        "name": event.name,
+        "description": "Fair Drop allocation event.",
+        "date": event.created_at.isoformat() if event.created_at else None,
+        "timezone": "UTC",
+        "registrationDeadline": None,
+        "capacity": event.capacity,
+        "entryCount": entry_count,
+        "status": "Open" if event.is_open else "Closed",
+        "venue": "Fair Drop allocation system",
+        "isOpen": event.is_open,
+    }
+
+@router.get("")
+async def list_events(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Event, func.count(Entry.id))
+        .outerjoin(Entry, Entry.event_id == Event.id)
+        .group_by(Event.id)
+        .order_by(Event.created_at.desc())
+    )
+    return [serialize_event(event, entry_count) for event, entry_count in result.all()]
+
+@router.get("/{event_id}")
+async def get_event(event_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Event, func.count(Entry.id))
+        .outerjoin(Entry, Entry.event_id == Event.id)
+        .where(Event.id == event_id)
+        .group_by(Event.id)
+    )
+    row = result.one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Event not found")
+    event, entry_count = row
+    return serialize_event(event, entry_count)
 
 @router.post("/{event_id}/enter")
 async def enter_drop(
