@@ -44,7 +44,7 @@ const styles = {
   },
 };
 
-export default function AuthPage({ onBack }) {
+export default function AuthPage({ onBack, onLogin }) {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -79,7 +79,7 @@ export default function AuthPage({ onBack }) {
       } else {
         localStorage.setItem("access_token", data.access_token);
         localStorage.setItem("user_role", data.role);
-        setMessage(`Logged in as ${data.role}.`);
+        onLogin?.(data);
       }
     } catch (requestError) {
       setError(requestError.message);
