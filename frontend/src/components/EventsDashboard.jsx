@@ -35,6 +35,9 @@ function EventCard({ event, onOpen }) {
         </span>
       </div>
       <h3>{event.name}</h3>
+      {event.scheduleValid === false && (
+        <p className="schedule-warning">{event.scheduleError}</p>
+      )}
       <p className="event-description">{event.description}</p>
       <div className="event-meta">
         <div>

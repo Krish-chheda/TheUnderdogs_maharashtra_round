@@ -16,10 +16,9 @@
   color: var(--dash-violet);
   .create-event-form {
     display: grid;
-    grid-template-columns: minmax(180px, 1.3fr) 100px minmax(
-        180px,
-        1.2fr
-      ) minmax(180px, 1.2fr) minmax(180px, 1.2fr) auto;
+    grid-template-columns:
+      minmax(180px, 1.3fr) 100px minmax(180px, 1.2fr)
+      minmax(180px, 1.2fr) minmax(180px, 1.2fr) auto;
     align-items: end;
     gap: 12px;
     flex: 1;
@@ -202,9 +201,42 @@
     system-ui,
     sans-serif;
 }
+.admin-event-title {
+  position: relative;
+  padding-left: 38px;
+}
+.admin-delete-button {
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(253, 164, 175, 0.35);
+  background: transparent;
+  color: #fda4af;
+  cursor: pointer;
+  font:
+    18px/1 ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+.admin-delete-button:hover {
+  border-color: #fda4af;
+  background: rgba(253, 164, 175, 0.1);
+}
+.admin-delete-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
 .admin-event-stat span {
   display: block;
   margin-bottom: 8px;
+  .admin-schedule-warning {
+    margin: 0 0 10px;
+    color: #fda4af;
+    font-size: 10px;
+    line-height: 1.45;
+  }
   color: var(--dash-muted);
   font-size: 9px;
   text-transform: uppercase;

@@ -5,7 +5,11 @@ import {
   lifecycle,
   trafficSeries,
 } from "../data/adminEvents";
-import { createEvent as createEventRequest, fetchEvents } from "../lib/api";
+import {
+  createEvent as createEventRequest,
+  deleteEvent as deleteEventRequest,
+  fetchEvents,
+} from "../lib/api";
 import "../admin.css";
 
 const statusLabel = (status) => status.replaceAll("_", " ");
@@ -21,6 +25,18 @@ const formatDate = (value) =>
       }).format(new Date(value))
     : "No deadline set";
 
+const localDateTimeValue = (date) => {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const previousDayDeadline = (dateValue) => {
+  const date = new Date(`${dateValue}:00`);
+  date.setDate(date.getDate() - 1);
+  date.setHours(23, 59, 0, 0);
+  return localDateTimeValue(date);
+};
+
 const toAdminEvent = (event) => ({
   id: event.id || event.event_id,
   name: event.name,
@@ -29,9 +45,13 @@ const toAdminEvent = (event) => ({
   venue: event.venue || "Venue to be announced",
   date: event.date || "",
   status:
-    event.isOpen === false || event.status === "Closed"
-      ? lifecycle.REGISTRATION_CLOSED
-      : lifecycle.REGISTRATION_OPEN,
+    event.scheduleValid === false
+      ? "INVALID_SCHEDULE"
+      : event.isOpen === false || event.status === "Closed"
+        ? lifecycle.REGISTRATION_CLOSED
+        : lifecycle.REGISTRATION_OPEN,
+  scheduleValid: event.scheduleValid !== false,
+  scheduleError: event.scheduleError || "",
   registrationDeadline: event.registrationDeadline || "",
 });
 
@@ -164,6 +184,7 @@ export default function AdminDashboard({ onLogout }) {
   const [registrationDeadline, setRegistrationDeadline] = useState("");
   const [creating, setCreating] = useState(false);
   const [processingId, setProcessingId] = useState("");
+  const [deletingId, setDeletingId] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -177,6 +198,7 @@ export default function AdminDashboard({ onLogout }) {
       ),
     [events],
   );
+  const minimumDateTimeValue = localDateTimeValue(new Date());
 
   useEffect(() => {
     let active = true;
@@ -210,8 +232,8 @@ export default function AdminDashboard({ onLogout }) {
       );
       return;
     }
-    if (new Date(registrationDeadline) <= new Date(eventDate)) {
-      setError("The registration deadline must be after the event date.");
+    if (new Date(registrationDeadline) >= new Date(eventDate)) {
+      setError("Registration deadline must be before the event date.");
       return;
     }
     setCreating(true);
@@ -288,6 +310,27 @@ export default function AdminDashboard({ onLogout }) {
     }
     setNotice(`${current.name} moved to ${statusLabel(finalStatus)}.`);
     setProcessingId("");
+  };
+
+  const removeEvent = async (eventId, eventNameToDelete) => {
+    if (
+      !window.confirm(
+        `Delete ${eventNameToDelete}? This removes it for users too.`,
+      )
+    )
+      return;
+    setDeletingId(eventId);
+    setError("");
+    setNotice("");
+    try {
+      await deleteEventRequest(eventId);
+      setEvents((items) => items.filter((item) => item.id !== eventId));
+      setNotice("Event deleted from the database and user event listings.");
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setDeletingId("");
+    }
   };
 
   return (
@@ -406,18 +449,35 @@ export default function AdminDashboard({ onLogout }) {
               Date
               <input
                 type="datetime-local"
+                required
+                min={registrationDeadline || minimumDateTimeValue}
                 value={eventDate}
-                onChange={(event) => setEventDate(event.target.value)}
+                onChange={(event) => {
+                  const nextEventDate = event.target.value;
+                  setEventDate(nextEventDate);
+                  if (!registrationDeadline) {
+                    setRegistrationDeadline(previousDayDeadline(nextEventDate));
+                  } else if (
+                    new Date(registrationDeadline) >= new Date(nextEventDate)
+                  ) {
+                    setRegistrationDeadline("");
+                  }
+                }}
+                onClick={(event) => event.currentTarget.showPicker?.()}
               />
             </label>
             <label>
               Deadline
               <input
                 type="datetime-local"
+                required
+                min={minimumDateTimeValue}
+                max={eventDate || undefined}
                 value={registrationDeadline}
                 onChange={(event) =>
                   setRegistrationDeadline(event.target.value)
                 }
+                onClick={(event) => event.currentTarget.showPicker?.()}
               />
             </label>
             <button
@@ -472,13 +532,29 @@ export default function AdminDashboard({ onLogout }) {
               {events.map((event) => {
                 const action = actionFor(event.status);
                 const isProcessing = processingId === event.id;
+                const isDeleting = deletingId === event.id;
                 return (
                   <article className="admin-event-row" key={event.id}>
                     <div className="admin-event-title">
+                      <button
+                        type="button"
+                        className="admin-delete-button"
+                        title="Delete event"
+                        aria-label={`Delete ${event.name}`}
+                        disabled={isDeleting || isProcessing}
+                        onClick={() => removeEvent(event.id, event.name)}
+                      >
+                        ×
+                      </button>
                       <span className="event-code">
                         FD / {event.id.slice(0, 4).toUpperCase()}
                       </span>
                       <h3>{event.name}</h3>
+                      {!event.scheduleValid && (
+                        <p className="admin-schedule-warning">
+                          {event.scheduleError}
+                        </p>
+                      )}
                       <span
                         className={`lifecycle lifecycle-${event.status.toLowerCase()}`}
                       >

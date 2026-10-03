@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Header
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy import select
+from sqlalchemy import func, select
 from app.models.base import Event, Entry, Allocation, User
 from app.core.database import get_db
 from app.core.redis import redis_client
@@ -22,7 +22,23 @@ from app.dependencies.rate_limit import rate_limit
 
 router = APIRouter(prefix="/events", tags=["events"])
 
+def utc_time(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+def event_status(event: Event) -> str:
+    now = datetime.now(timezone.utc)
+    if event.event_date and event.registration_deadline and utc_time(event.registration_deadline) >= utc_time(event.event_date):
+        return "Invalid schedule"
+    if event.event_date and utc_time(event.event_date) <= now:
+        return "Completed"
+    if event.registration_deadline and utc_time(event.registration_deadline) < now:
+        return "Closed"
+    return "Open" if event.is_open else "Closed"
+
 def serialize_event(event: Event, entry_count: int):
+    schedule_valid = not event.event_date or not event.registration_deadline or utc_time(event.registration_deadline) < utc_time(event.event_date)
     return {
         "id": str(event.id),
         "name": event.name,
@@ -32,9 +48,11 @@ def serialize_event(event: Event, entry_count: int):
         "registrationDeadline": event.registration_deadline.isoformat() if event.registration_deadline else None,
         "capacity": event.capacity,
         "entryCount": entry_count,
-        "status": "Open" if event.is_open else "Closed",
+        "status": event_status(event),
         "venue": event.venue or "Fair Drop allocation system",
         "isOpen": event.is_open,
+        "scheduleValid": schedule_valid,
+        "scheduleError": None if schedule_valid else "Registration deadline must be before the event date.",
     }
 
 @router.get("")
@@ -72,8 +90,17 @@ async def enter_drop(
 ):
     # 1. Verify Event Status
     event = await db.get(Event, event_id)
+    now = datetime.now(timezone.utc)
+    event_date = utc_time(event.event_date) if event and event.event_date else None
+    registration_deadline = utc_time(event.registration_deadline) if event and event.registration_deadline else None
     if not event or not event.is_open:
         raise HTTPException(status_code=400, detail="Event is not active or does not exist")
+    if event_date and registration_deadline and registration_deadline >= event_date:
+        raise HTTPException(status_code=400, detail="Registration deadline must be before the event date.")
+    if event_date and now >= event_date:
+        raise HTTPException(status_code=400, detail="Registration is closed because the event has started")
+    if registration_deadline and now > registration_deadline:
+        raise HTTPException(status_code=400, detail="Registration deadline has passed")
 
     # 2. Idempotent Insert (Concurrency Safe)
     stmt = (

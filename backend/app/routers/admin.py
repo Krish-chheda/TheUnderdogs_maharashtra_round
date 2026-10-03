@@ -2,17 +2,18 @@ import hashlib
 import secrets
 import random
 import json
+import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select,asc
+from sqlalchemy import delete, select, asc
 from sqlalchemy.dialects.postgresql import insert
 from app.core.database import get_db
 from app.models.base import Event, User
 from app.dependencies.auth import get_current_admin
 from app.core.redis import redis_client
-from app.models.base import Event, Entry, Allocation
-from pydantic import BaseModel
+from app.models.base import Event, Entry, Allocation, Reservation
+from pydantic import BaseModel, model_validator
 
 router = APIRouter(prefix="/admin/events", tags=["admin"])
 
@@ -22,6 +23,22 @@ class EventCreate(BaseModel):
     venue: str
     event_date: datetime
     registration_deadline: datetime
+
+    @model_validator(mode="after")
+    def validate_schedule(self):
+        event_date = self.event_date
+        deadline = self.registration_deadline
+        if event_date.tzinfo is None:
+            event_date = event_date.replace(tzinfo=timezone.utc)
+        else:
+            event_date = event_date.astimezone(timezone.utc)
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        else:
+            deadline = deadline.astimezone(timezone.utc)
+        if deadline >= event_date:
+            raise ValueError("Registration deadline must be before the event date.")
+        return self
 
 @router.post("/")
 async def create_event(
@@ -43,6 +60,25 @@ async def create_event(
     await db.refresh(new_event)
     
     return {"event_id": str(new_event.id), "name": new_event.name}
+
+@router.delete("/{event_id}")
+async def delete_event(
+    event_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    event = await db.get(Event, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    await db.execute(delete(Reservation).where(Reservation.event_id == event_id))
+    await db.execute(delete(Allocation).where(Allocation.event_id == event_id))
+    await db.execute(delete(Entry).where(Entry.event_id == event_id))
+    await db.delete(event)
+    await db.commit()
+    await redis_client.delete(f"audit:{event_id}")
+
+    return {"message": "Event deleted", "event_id": str(event_id)}
 
 
 @router.post("/{event_id}/allocate")

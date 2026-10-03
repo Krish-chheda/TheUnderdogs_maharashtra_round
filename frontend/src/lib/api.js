@@ -12,7 +12,10 @@ const request = async (path, options = {}) => {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.detail || "Request failed");
+    const detail = Array.isArray(data.detail)
+      ? data.detail.map((item) => item.msg).join(" ")
+      : data.detail;
+    throw new Error(detail || "Request failed");
   }
   return data;
 };
@@ -21,8 +24,35 @@ export const fetchEvents = () => request("/events");
 
 export const fetchEvent = (eventId) => request(`/events/${eventId}`);
 
+export const requestOtp = (phone) =>
+  request("/auth/otp", {
+    method: "POST",
+    body: JSON.stringify({ phone }),
+  });
+
+export const verifyOtp = (phone, code) =>
+  request("/auth/verify", {
+    method: "POST",
+    body: JSON.stringify({ phone, code }),
+  });
+
+export const enterEvent = (eventId) =>
+  request(`/events/${eventId}/enter`, { method: "POST" });
+
+export const fetchEntryStatus = (eventId) =>
+  request(`/events/${eventId}/status`);
+
+export const claimEvent = (eventId, idempotencyKey) =>
+  request(`/events/${eventId}/claim`, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+  });
+
 export const createEvent = (payload) =>
   request("/admin/events/", {
     method: "POST",
     body: JSON.stringify(payload),
   });
+
+export const deleteEvent = (eventId) =>
+  request(`/admin/events/${eventId}`, { method: "DELETE" });
