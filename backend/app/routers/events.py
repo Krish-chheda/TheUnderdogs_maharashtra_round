@@ -27,13 +27,13 @@ def serialize_event(event: Event, entry_count: int):
         "id": str(event.id),
         "name": event.name,
         "description": "Fair Drop allocation event.",
-        "date": event.created_at.isoformat() if event.created_at else None,
+        "date": event.event_date.isoformat() if event.event_date else None,
         "timezone": "UTC",
-        "registrationDeadline": None,
+        "registrationDeadline": event.registration_deadline.isoformat() if event.registration_deadline else None,
         "capacity": event.capacity,
         "entryCount": entry_count,
         "status": "Open" if event.is_open else "Closed",
-        "venue": "Fair Drop allocation system",
+        "venue": event.venue or "Fair Drop allocation system",
         "isOpen": event.is_open,
     }
 
