@@ -6,8 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Header
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
+<<<<<<< HEAD
 from sqlalchemy import func, select
 from app.models.base import Event, Entry, Allocation, User
+=======
+from sqlalchemy import func,select
+from app.models.base import Event, Entry, Allocation, User, Reservation
+>>>>>>> 60775ee0e2fc5650b0d5b7ae00eb97b3b00c3390
 from app.core.database import get_db
 from app.core.redis import redis_client
 
