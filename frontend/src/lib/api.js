@@ -10,34 +10,19 @@ const request = async (path, options = {}) => {
       ...(options.headers || {}),
     },
   });
-
-  const retryAfter = response.headers.get("Retry-After");
   const data = await response.json().catch(() => ({}));
-
   if (!response.ok) {
     const detail = Array.isArray(data.detail)
       ? data.detail.map((item) => item.msg).join(" ")
       : data.detail;
-    const error = new Error(detail || "Request failed");
-    error.status = response.status;
-    error.retryAfter = retryAfter ? parseInt(retryAfter) : null;
-    throw error;
+    throw new Error(detail || "Request failed");
   }
   return data;
 };
 
-// Auth
-export const signup = (email, password, role = "user") =>
-  request("/auth/signup", {
-    method: "POST",
-    body: JSON.stringify({ email, password, role }),
-  });
+export const fetchEvents = () => request("/events");
 
-export const login = (email, password) =>
-  request("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
+export const fetchEvent = (eventId) => request(`/events/${eventId}`);
 
 export const requestOtp = (phone) =>
   request("/auth/otp", {
@@ -51,22 +36,11 @@ export const verifyOtp = (phone, code) =>
     body: JSON.stringify({ phone, code }),
   });
 
-// Events
-export const fetchEvents = () => request("/events");
-
-export const fetchEvent = (eventId) => request(`/events/${eventId}`);
-
-export const joinEvent = (eventId) =>
-  request(`/events/${eventId}/join`, { method: "POST" });
-
 export const enterEvent = (eventId) =>
   request(`/events/${eventId}/enter`, { method: "POST" });
 
-export const fetchEventStatus = (eventId) =>
+export const fetchEntryStatus = (eventId) =>
   request(`/events/${eventId}/status`);
-
-export const fetchEventAudit = (eventId) =>
-  request(`/events/${eventId}/audit`);
 
 export const claimEvent = (eventId, idempotencyKey) =>
   request(`/events/${eventId}/claim`, {
@@ -74,7 +48,6 @@ export const claimEvent = (eventId, idempotencyKey) =>
     headers: { "Idempotency-Key": idempotencyKey },
   });
 
-// Admin Events
 export const createEvent = (payload) =>
   request("/admin/events/", {
     method: "POST",
@@ -83,18 +56,3 @@ export const createEvent = (payload) =>
 
 export const deleteEvent = (eventId) =>
   request(`/admin/events/${eventId}`, { method: "DELETE" });
-
-export const commitAllocation = (eventId) =>
-  request(`/admin/events/${eventId}/allocation/commit`, {
-    method: "POST",
-  });
-
-export const runAllocation = (eventId) =>
-  request(`/admin/events/${eventId}/allocation/run`, {
-    method: "POST",
-  });
-
-export const sweepExpiredClaims = (eventId) =>
-  request(`/admin/events/${eventId}/sweep`, {
-    method: "POST",
-  });

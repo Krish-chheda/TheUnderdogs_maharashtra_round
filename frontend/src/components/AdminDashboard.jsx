@@ -10,6 +10,7 @@ import {
   deleteEvent as deleteEventRequest,
   fetchEvents,
 } from "../lib/api";
+import BotTesting from "./BotTesting";
 import "../admin.css";
 
 const statusLabel = (status) => status.replaceAll("_", " ");
@@ -188,6 +189,7 @@ export default function AdminDashboard({ onLogout }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("events");
 
   const seatsRemaining = useMemo(
     () =>
@@ -346,15 +348,34 @@ export default function AdminDashboard({ onLogout }) {
         </button>
         <span className="admin-badge">ADMIN CONSOLE</span>
         <nav className="dashboard-nav" aria-label="Admin navigation">
-          <a className="nav-link active" href="#admin-events">
+          <button
+            type="button"
+            className={`nav-link ${activeTab === "events" ? "active" : ""}`}
+            onClick={() => setActiveTab("events")}
+          >
             Events
-          </a>
-          <a className="nav-link" href="#traffic">
+          </button>
+          <button
+            type="button"
+            className={`nav-link ${activeTab === "audit" ? "active" : ""}`}
+            onClick={() => setActiveTab("audit")}
+          >
             Audit
-          </a>
-          <a className="nav-link" href="#integrity">
+          </button>
+          <button
+            type="button"
+            className={`nav-link ${activeTab === "profile" ? "active" : ""}`}
+            onClick={() => setActiveTab("profile")}
+          >
             Profile
-          </a>
+          </button>
+          <button
+            type="button"
+            className={`nav-link ${activeTab === "bot-testing" ? "active" : ""}`}
+            onClick={() => setActiveTab("bot-testing")}
+          >
+            Bot Testing
+          </button>
         </nav>
         <button type="button" className="logout-button" onClick={onLogout}>
           Log out
@@ -375,46 +396,49 @@ export default function AdminDashboard({ onLogout }) {
             Administrator<strong>Allocation control active</strong>
           </div>
         </section>
-        <section className="admin-metrics" aria-label="Live metrics">
-          <Metric
-            label="Total entries"
-            value={formatNumber(metrics.totalEntries)}
-            detail="Across active events"
-          />
-          <Metric
-            label="Seats remaining"
-            value={formatNumber(seatsRemaining || metrics.seatsRemaining)}
-            detail="Available capacity"
-            accent="violet"
-          />
-          <Metric
-            label="Requests / sec"
-            value={metrics.requestsPerSecond}
-            detail="Current throughput"
-          />
-          <Metric
-            label="Claims processed"
-            value={formatNumber(metrics.claimsProcessed)}
-            detail="Last 24 hours"
-            accent="violet"
-          />
-          <Metric
-            label="Rate limited"
-            value={formatNumber(metrics.rateLimited)}
-            detail="Requests held"
-            accent="muted"
-          />
-          <Metric
-            label="Blocked"
-            value={formatNumber(metrics.blocked)}
-            detail="Traffic denied"
-            accent="muted"
-          />
-        </section>
-        <section
-          className="admin-create-panel"
-          aria-labelledby="create-heading"
-        >
+        {activeTab === "events" && (
+          <section className="admin-metrics" aria-label="Live metrics">
+            <Metric
+              label="Total entries"
+              value={formatNumber(metrics.totalEntries)}
+              detail="Across active events"
+            />
+            <Metric
+              label="Seats remaining"
+              value={formatNumber(seatsRemaining || metrics.seatsRemaining)}
+              detail="Available capacity"
+              accent="violet"
+            />
+            <Metric
+              label="Requests / sec"
+              value={metrics.requestsPerSecond}
+              detail="Current throughput"
+            />
+            <Metric
+              label="Claims processed"
+              value={formatNumber(metrics.claimsProcessed)}
+              detail="Last 24 hours"
+              accent="violet"
+            />
+            <Metric
+              label="Rate limited"
+              value={formatNumber(metrics.rateLimited)}
+              detail="Requests held"
+              accent="muted"
+            />
+            <Metric
+              label="Blocked"
+              value={formatNumber(metrics.blocked)}
+              detail="Traffic denied"
+              accent="muted"
+            />
+          </section>
+        )}
+        {activeTab === "events" && (
+          <section
+            className="admin-create-panel"
+            aria-labelledby="create-heading"
+          >
           <div>
             <p className="eyebrow">New allocation window</p>
             <h2 id="create-heading">Create event</h2>
@@ -489,6 +513,7 @@ export default function AdminDashboard({ onLogout }) {
             </button>
           </form>
         </section>
+        )}
         {notice && (
           <p className="admin-notice" role="status">
             {notice}
@@ -499,6 +524,7 @@ export default function AdminDashboard({ onLogout }) {
             {error}
           </p>
         )}
+        {activeTab === "events" && (
         <section className="admin-section" id="admin-events">
           <div className="admin-section-heading">
             <div>
@@ -603,31 +629,39 @@ export default function AdminDashboard({ onLogout }) {
             </div>
           )}
         </section>
-        <section className="admin-lower-grid">
-          <div className="admin-panel" id="traffic">
-            <div className="admin-panel-heading">
-              <div>
-                <p className="eyebrow">Traffic monitor</p>
-                <h2>Request traffic</h2>
+        )}
+        {activeTab === "audit" && (
+          <section className="admin-lower-grid">
+            <div className="admin-panel" id="traffic">
+              <div className="admin-panel-heading">
+                <div>
+                  <p className="eyebrow">Traffic monitor</p>
+                  <h2>Request traffic</h2>
+                </div>
+                <span className="live-label">
+                  <i className="pulse-dot" />
+                  Live
+                </span>
               </div>
-              <span className="live-label">
-                <i className="pulse-dot" />
-                Live
-              </span>
+              <TrafficChart />
             </div>
-            <TrafficChart />
-          </div>
-          <div className="admin-panel" id="integrity">
-            <div className="admin-panel-heading">
-              <div>
-                <p className="eyebrow">Fairness verification</p>
-                <h2>Allocation integrity</h2>
+          </section>
+        )}
+        {activeTab === "profile" && (
+          <section className="admin-lower-grid">
+            <div className="admin-panel" id="integrity">
+              <div className="admin-panel-heading">
+                <div>
+                  <p className="eyebrow">Fairness verification</p>
+                  <h2>Allocation integrity</h2>
+                </div>
+                <span className="integrity-state">Healthy</span>
               </div>
-              <span className="integrity-state">Healthy</span>
+              <IntegrityPanel integrity={integrity} />
             </div>
-            <IntegrityPanel integrity={integrity} />
-          </div>
-        </section>
+          </section>
+        )}
+        {activeTab === "bot-testing" && <BotTesting />}
       </main>
       <footer className="dashboard-footer">
         <span>FAIR DROP / ADMIN CONTROL PLANE</span>
