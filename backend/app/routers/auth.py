@@ -107,7 +107,9 @@ async def request_otp(request: Request, payload: OTPRequest):
 
     # 2. CSPRNG generation of 6-digit OTP
     otp_code = "".join(secrets.choice("0123456789") for _ in range(6))
-    
+
+
+    print(f"OTP FOR NUMBER {payload.phone} IS {otp_code}")
     # 3. Cryptographic salt + SHA-256 hash storage (No plaintext in Redis)
     salt = secrets.token_hex(16)
     otp_hash = hashlib.sha256(f"{salt}:{otp_code}".encode("utf-8")).hexdigest()
