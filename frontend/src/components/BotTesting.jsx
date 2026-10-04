@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 
 function BotTestCard({ title, description, onRun, isRunning }) {
   return (
@@ -21,6 +22,7 @@ export default function BotTesting() {
   const [results, setResults] = useState(null);
   const [error, setError] = useState("");
   const [running, setRunning] = useState(false);
+  const { eventId } = useParams();
 
   const tests = [
     {
@@ -49,75 +51,41 @@ export default function BotTesting() {
     setRunning(true);
     setError("");
     setResults(null);
-
+    const { eventId } = useParams(); // assumes route includes :eventId
     try {
-      // Mock results for now - will connect to real API when available
-      const mockResults = {
-        "high-speed-bot": {
-          test: "High-Speed Bot",
-          totalRequests: 100,
-          uniqueUsers: 1,
-          successful: 20,
-          rateLimited: 80,
-          errors: 0,
-          duration: "2.3s",
-          throughput: "43 req/s",
-          uniqueEntries: 1,
-          duplicateAttempts: 99,
-          oversold: 0,
-          pass: true,
-        },
-        "high-volume-bot": {
-          test: "High-Volume Bot",
-          totalRequests: 1000,
-          uniqueUsers: 1,
-          successful: 1,
-          rateLimited: 999,
-          errors: 0,
-          duration: "12.5s",
-          throughput: "80 req/s",
-          uniqueEntries: 1,
-          duplicateAttempts: 999,
-          oversold: 0,
-          pass: true,
-        },
-        "duplicate-attack": {
-          test: "Duplicate Attack",
-          totalRequests: 1000,
-          uniqueUsers: 1,
-          successful: 1,
-          rateLimited: 999,
-          errors: 0,
-          duration: "3.1s",
-          throughput: "322 req/s",
-          uniqueEntries: 1,
-          duplicateAttempts: 999,
-          oversold: 0,
-          pass: true,
-        },
-        "flash-crowd": {
-          test: "Flash Crowd",
-          totalRequests: 5000,
-          uniqueUsers: 5000,
-          successful: 5000,
-          rateLimited: 0,
-          errors: 0,
-          duration: "5.8s",
-          throughput: "862 req/s",
-          uniqueEntries: 5000,
-          duplicateAttempts: 0,
-          oversold: 0,
-          pass: true,
-        },
+      // Start bot test
+      const startResp = await fetch(`/admin/events/${eventId}/bot-test/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ test_name: testName }),
+        credentials: "include",
+      });
+      if (!startResp.ok) {
+        const errText = await startResp.text();
+        throw new Error(`Start failed: ${errText}`);
+      }
+      const { test_id } = await startResp.json();
+      // Poll for status
+      const poll = async () => {
+        const statusResp = await fetch(`/admin/events/${eventId}/bot-test/${test_id}`, {
+          method: "GET",
+          credentials: "include",
+        });
+        if (!statusResp.ok) {
+          const errText = await statusResp.text();
+          throw new Error(`Status fetch failed: ${errText}`);
+        }
+        const data = await statusResp.json();
+        if (data.status === "running") {
+          setTimeout(poll, 2000);
+        } else {
+          setResults(data.result || {});
+          setRunning(false);
+        }
       };
-
-      // Simulate network delay
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      setResults(mockResults[testName] || {});
+      poll();
     } catch (err) {
       setError(err.message);
-    } finally {
       setRunning(false);
     }
   };
